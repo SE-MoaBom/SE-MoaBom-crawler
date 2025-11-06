@@ -1,0 +1,14 @@
+# Playwright for web scraping
+playwright==1.55.0
+
+# Database drivers (필요에 따라 선택)
+# psycopg2-binary==2.9.9  # PostgreSQL
+# pymongo==4.6.0          # MongoDB
+# mysql-connector-python==8.2.0  # MySQL
+
+# Utilities
+python-dotenv==1.1.0
+requests==2.32.3
+
+# Logging
+structlog==25.5.0
