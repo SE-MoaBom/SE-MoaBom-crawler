@@ -2,6 +2,7 @@ import re
 from .crawler import Crawler
 from models import KinoData, Program, Availability
 from datetime import datetime
+import urllib.parse
 
 
 # 키노라이츠 크롤러
@@ -24,6 +25,8 @@ class KinoCrawler(Crawler):
             timeout=timeout,
             logger=logger,
         )
+        self.name = f"kinolights-{name}"
+        self.timeout = timeout
         self.url = url
         self.action_delay = action_delay
         self.scroll_limit = scroll_limit
@@ -32,20 +35,30 @@ class KinoCrawler(Crawler):
         result: list[KinoData] = []
 
         try:
-            await self._before_crawl()
-
             # 1단계. 스크롤 페이지 끝까지 내려 모두 로딩
             await self.page.goto(self.url)
+            await self.page.wait_for_load_state(
+                "domcontentloaded", timeout=self.timeout
+            )
+            await self._before_crawl()
+            await self.page.wait_for_load_state("load", timeout=self.timeout)
             await self._scroll_page_until_end(limit=self.scroll_limit)
+            await self.page.wait_for_load_state("networkidle", timeout=self.timeout)
 
             # 2단계. 각 작품 id 수집
             items = await self._get_attributes("div.contents-wrap a", "href")
             ids = [m.group() for item in items if (m := re.search(r"\d+", item))]
 
+            if not ids:
+                items = await self._get_attributes("div.container__contents a", "href")
+                ids = [m.group() for item in items if (m := re.search(r"\d+", item))]
+
+            self.logger.info(f"Found {len(ids)} items to crawl.", crawler=self.name)
+
             # 3단계. 각 작품 정보 수집
-            for id in ids:
+            for index, id in enumerate(ids):
                 await self.page.goto(f"{self.TITLE_URL}{id}")
-                await self.page.wait_for_selector(".title-kr")
+                await self.page.wait_for_selector(".title-kr", timeout=self.timeout)
 
                 # 정액제 버튼 클릭
                 await self._click_element(".price-tab")
@@ -54,6 +67,10 @@ class KinoCrawler(Crawler):
                 # OTT 정보 수집
                 ott_items = await self.page.query_selector_all(".movie-price-item")
                 if not ott_items:
+                    self.logger.warning(
+                        f"No OTT(월정액) availability found for id {id}. Skipping.",
+                        crawler=self.name,
+                    )
                     continue
 
                 availabilities: list[Availability] = []
@@ -92,7 +109,7 @@ class KinoCrawler(Crawler):
                     availabilities.append(
                         Availability(
                             ott_name=ott_name,
-                            web_url=web_url,
+                            web_url=self._extract_original_url(web_url),
                             ott_release_date=ott_release_date,
                             ott_close_date=ott_close_date,
                         )
@@ -126,9 +143,23 @@ class KinoCrawler(Crawler):
                 )
 
                 result.append(kino_data)
+                self.logger.info(
+                    f"Crawled {index + 1}/{len(ids)}: {program.title}",
+                    crawler=self.name,
+                )
         except Exception as e:
             self.logger.error("Error occurred while crawling", error=str(e))
         return result
 
     async def _before_crawl(self) -> None:
         pass
+
+    def _extract_original_url(self, url: str | None) -> str | None:
+        if not url:
+            return None
+        parsed = urllib.parse.urlparse(url)
+        params = urllib.parse.parse_qs(parsed.query)
+        original_url = params.get("url", [None])[0]
+        if original_url:
+            return urllib.parse.unquote(original_url)
+        return url

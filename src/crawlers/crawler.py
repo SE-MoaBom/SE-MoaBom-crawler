@@ -31,16 +31,18 @@ class Crawler(ABC):
 
     async def start_browser(self):
         """Start the browser instance."""
-        self.logger.info("Starting browser", platform=self.platform_name)
+        self.logger.info("Starting browser", crawler=self.platform_name)
         self.playwright = await async_playwright().start()
         self.browser = await self.playwright.chromium.launch(headless=self.headless)
-        self.page = await self.browser.new_page()
+
+        context = await self.browser.new_context(**self.playwright.devices["Pixel 5"])
+        self.page = await context.new_page()
         self.page.set_default_timeout(self.timeout)
 
     async def close_browser(self):
         """Close the browser instance."""
         if self.browser:
-            self.logger.info("Closing browser", platform=self.platform_name)
+            self.logger.info("Closing browser", crawler=self.platform_name)
             await self.browser.close()
             await self.playwright.stop()
 
@@ -62,19 +64,19 @@ class Crawler(ABC):
             list of crawled content data
         """
         try:
-            self.logger.info("Starting crawl", platform=self.platform_name)
+            self.logger.info("Starting crawl", crawler=self.platform_name)
             await self.start_browser()
 
             data = await self.crawl()
             self.logger.info(
                 "Crawl completed successfully",
-                platform=self.platform_name,
+                crawler=self.platform_name,
                 items_count=len(data),
             )
             return data
         except Exception as e:
             self.logger.error(
-                "Crawl failed", platform=self.platform_name, error=str(e), exc_info=True
+                "Crawl failed", crawler=self.platform_name, error=str(e), exc_info=True
             )
             return []
         finally:
