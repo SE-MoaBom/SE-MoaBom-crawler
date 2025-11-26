@@ -1,0 +1,19 @@
+services:
+  crawler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ott-crawler
+    environment:
+      - TZ=Asia/Seoul
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./logs:/var/log/crawler
+      - ./src:/app/src
+    restart: unless-stopped
+    networks:
+      - crawler-network
+
+networks:
+  crawler-network:
+    driver: bridge

@@ -1,39 +1,52 @@
-from dataclasses import asdict
-import json
-from utils import get_logger, Config
-from crawlers import UpcomingCrawler, ExpiredCrawler, ExploreCrawler, Crawler
 import asyncio
+from utils import get_logger, config
+from crawlers import UpcomingCrawler, ExpiredCrawler, RankingCrawler, Crawler
+from datetime import datetime
+from db import init_db, AsyncSessionLocal, Repository, seed_otts, close_db
 
 
 async def main():
-    config = Config()
     logger = get_logger(log_file_path=config.LOG_FILE_PATH, log_level=config.LOG_LEVEL)
     logger.info("Application started.")
 
-    crawler_settings = {
-        "logger": logger,
-        "headless": config.HEADLESS_MODE,
-        "timeout": config.BROWSER_TIMEOUT,
-        "action_delay": config.ACTION_DELAY,
-        "scroll_limit": config.SCROLL_LIMIT,
-    }
+    batch_start_time = datetime.now()
+
+    try:
+        await init_db()
+        await seed_otts()
+        logger.info("Database initialized and OTT platforms seeded.")
+    except Exception as e:
+        logger.error("Failed to initialize database", error=str(e))
+        return
 
     crawlers: list[Crawler] = [
-        # UpcomingCrawler(**crawler_settings),
-        # ExpiredCrawler(**crawler_settings),
-        ExploreCrawler(
-            **crawler_settings
-        ),  # 주의! scroll_limit 없으면 10만개 이상 크롤링
+        UpcomingCrawler(logger=logger),
+        ExpiredCrawler(logger=logger),
+        RankingCrawler(logger=logger),
     ]
+
+    cleanup_upcoming = any(isinstance(c, UpcomingCrawler) for c in crawlers)
+    cleanup_expiring = any(isinstance(c, ExpiredCrawler) for c in crawlers)
 
     results = await asyncio.gather(*(crawler.run() for crawler in crawlers))
 
-    # 임시 코드: json 파일로 저장
-    results_dict = [
-        [asdict(item) for item in crawler_result] for crawler_result in results
-    ]
-    with open("results.json", "w") as f:
-        json.dump(results_dict, f, ensure_ascii=False, indent=4, default=str)
+    async with AsyncSessionLocal() as session:
+        repo = Repository(session, logger=logger)
+        for crawler_result in results:
+            if crawler_result:
+                await repo.save_crawl_results(crawler_result)
+                logger.info(f"Saved {len(crawler_result)} items to database.")
+
+        await repo.cleanup_outdated_data(
+            batch_start_time=batch_start_time,
+            cleanup_upcoming=cleanup_upcoming,
+            cleanup_expiring=cleanup_expiring,
+        )
+
+        await repo.log_statistics()
+
+    logger.info("Application finished.")
+    await close_db()
 
 
 if __name__ == "__main__":
