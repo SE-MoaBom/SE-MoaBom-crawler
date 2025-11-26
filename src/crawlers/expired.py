@@ -1,21 +1,22 @@
-from .kino_crawler import KinoCrawler
+from .kino import KinoCrawler
+import structlog
 
 
-# 키노라이츠 공개 예정작 크롤러
-class UpcomingCrawler(KinoCrawler):
-    BASE_URL = "https://m.kinolights.com/new?tab=upcoming"
+# 키노라이츠 종료 예정작 크롤러
+class ExpiredCrawler(KinoCrawler):
+    BASE_URL = "https://m.kinolights.com/new?tab=expired"
 
     def __init__(
         self,
         headless: bool = True,
         timeout: int = 30000,
-        logger=None,
+        logger: structlog.stdlib.BoundLogger | None = None,
         action_delay: int = 300,
         scroll_limit: int = 100,
     ):
         super().__init__(
             url=self.BASE_URL,
-            name="upcoming",
+            name="expired",
             headless=headless,
             timeout=timeout,
             logger=logger,
