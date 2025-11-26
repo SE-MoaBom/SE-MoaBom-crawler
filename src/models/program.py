@@ -11,4 +11,3 @@ class Program:
     backdrop_url: str | None = None
     running_time: int | None = None
     ranking: int | None = None
-    status: str | None = None

@@ -41,6 +41,9 @@ pip install -r requirements.txt
 # 빌드 및 실행
 docker compose up -d --build
 
+# 혹은 Foreground 모드로 실행
+docker compose up --build
+
 # 로그 확인
 docker compose logs -f
 

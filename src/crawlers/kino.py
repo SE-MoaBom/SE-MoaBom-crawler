@@ -128,12 +128,6 @@ class KinoCrawler(Crawler):
         rt_str = metadata.get("러닝타임")
         running_time = int(re.search(r"(\d+)", rt_str).group(1)) if rt_str else None
 
-        status = (
-            "UPCOMING"
-            if "upcoming" in self.name
-            else "EXPIRING" if "expired" in self.name else None
-        )
-
         program = Program(
             kino_id=int(id),
             title=title,
@@ -143,7 +137,6 @@ class KinoCrawler(Crawler):
             backdrop_url=backdrop_url,
             running_time=running_time,
             ranking=None,  # 랭킹은 RankingCrawler에서 후처리
-            status=status,
         )
 
         return KinoData(program=program, availabilities=availabilities)

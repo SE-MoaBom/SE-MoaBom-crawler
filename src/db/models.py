@@ -63,7 +63,6 @@ class ProgramModel(Base):
     backdrop_url = Column(String(255), nullable=True)
     running_time = Column(Integer, nullable=True)
     ranking = Column(Integer, nullable=True)
-    status = Column(String(50), nullable=True)
     updated_at = Column(
         TIMESTAMP, nullable=False, default=func.now(), onupdate=func.now()
     )
@@ -171,7 +170,6 @@ class ProgramModel(Base):
     backdrop_url = Column(String(255), nullable=True)
     running_time = Column(Integer, nullable=True)
     ranking = Column(Integer, nullable=True)
-    status = Column(String(50), nullable=True)
     updated_at = Column(
         TIMESTAMP, nullable=False, default=func.now(), onupdate=func.now()
     )

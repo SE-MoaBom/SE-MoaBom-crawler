@@ -9,6 +9,7 @@ from tenacity import (
     retry_if_exception_type,
 )
 import structlog
+from datetime import timedelta
 
 
 class Repository:
@@ -46,7 +47,6 @@ class Repository:
                         "backdrop_url": p.backdrop_url,
                         "running_time": p.running_time,
                         "ranking": p.ranking,
-                        "status": p.status,
                     }
                 )
 
@@ -58,6 +58,7 @@ class Repository:
                     for col in stmt.inserted
                     if col.name not in ["program_id", "crawling_id", "created_at"]
                 }
+                update_dict["updated_at"] = func.now()
                 await self.session.execute(stmt.on_duplicate_key_update(update_dict))
                 await self.session.commit()
 
@@ -116,6 +117,7 @@ class Repository:
                     "url": stmt.inserted.url,
                     "release_date": stmt.inserted.release_date,
                     "expire_date": stmt.inserted.expire_date,
+                    "updated_at": func.now(),
                 }
                 await self.session.execute(stmt.on_duplicate_key_update(update_dict))
                 await self.session.commit()
@@ -131,20 +133,21 @@ class Repository:
     async def cleanup_outdated_data(
         self,
         batch_start_time,
-        cleanup_upcoming: bool = False,
         cleanup_expiring: bool = False,
+        cleanup_upcoming: bool = False,
     ):
         if self.logger:
             self.logger.info("Starting cleanup of outdated data...")
 
         try:
-            # 1. 공개 예정작 정리 (status -> NULL)
+            threshold_time = batch_start_time - timedelta(hours=12)
+
+            # 1. 공개 예정작 정보 삭제
             if cleanup_upcoming:
                 stmt_upcoming = (
-                    ProgramModel.__table__.update()
-                    .where(ProgramModel.status == "UPCOMING")
-                    .where(ProgramModel.updated_at < batch_start_time)
-                    .values(status=None)
+                    AvailabilityModel.__table__.delete()
+                    .where(AvailabilityModel.release_date.is_not(None))
+                    .where(AvailabilityModel.updated_at < threshold_time)
                 )
                 await self.session.execute(stmt_upcoming)
 
@@ -153,7 +156,7 @@ class Repository:
                 stmt_expiring = (
                     AvailabilityModel.__table__.delete()
                     .where(AvailabilityModel.expire_date.is_not(None))
-                    .where(AvailabilityModel.updated_at < batch_start_time)
+                    .where(AvailabilityModel.updated_at < threshold_time)
                 )
                 await self.session.execute(stmt_expiring)
 
@@ -161,11 +164,7 @@ class Repository:
             subq = select(AvailabilityModel.availability_id).where(
                 AvailabilityModel.program_id == ProgramModel.program_id
             )
-            stmt_orphaned = (
-                ProgramModel.__table__.delete()
-                .where(ProgramModel.status.is_(None))
-                .where(~exists(subq))
-            )
+            stmt_orphaned = ProgramModel.__table__.delete().where(~exists(subq))
             await self.session.execute(stmt_orphaned)
 
             await self.session.commit()
@@ -180,22 +179,10 @@ class Repository:
             total = await self.session.scalar(
                 select(func.count()).select_from(ProgramModel)
             )
-            upcoming = await self.session.scalar(
-                select(func.count())
-                .select_from(ProgramModel)
-                .where(ProgramModel.status == "UPCOMING")
-            )
-            expiring = await self.session.scalar(
-                select(func.count())
-                .select_from(ProgramModel)
-                .where(ProgramModel.status == "EXPIRING")
-            )
 
             self.logger.info(
                 "📊 DB Statistics",
                 total_programs=total,
-                upcoming=upcoming,
-                expiring=expiring,
             )
         except Exception as e:
             self.logger.error("Failed to fetch DB statistics", error=str(e))

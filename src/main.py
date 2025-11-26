@@ -28,15 +28,23 @@ async def main():
     cleanup_upcoming = any(isinstance(c, UpcomingCrawler) for c in crawlers)
     cleanup_expiring = any(isinstance(c, ExpiredCrawler) for c in crawlers)
 
-    results = await asyncio.gather(*(crawler.run() for crawler in crawlers))
-
     async with AsyncSessionLocal() as session:
         repo = Repository(session, logger=logger)
-        for crawler_result in results:
-            if crawler_result:
-                await repo.save_crawl_results(crawler_result)
-                logger.info(f"Saved {len(crawler_result)} items to database.")
+        for crawler in crawlers:
+            crawler_name = type(crawler).__name__
+            try:
+                logger.info(f"🚀 Starting crawler sequence: {crawler_name}")
+                result = await crawler.run()
 
+                if result:
+                    await repo.save_crawl_results(result)
+                    logger.info(f"✅ Saved {len(result)} items from {crawler_name}.")
+
+                await asyncio.sleep(2)
+            except Exception as e:
+                logger.error(f"❌ Crawler {crawler_name} failed", error=str(e))
+
+        # 모든 크롤링 완료 후 정리 작업
         await repo.cleanup_outdated_data(
             batch_start_time=batch_start_time,
             cleanup_upcoming=cleanup_upcoming,
