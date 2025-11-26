@@ -1,4 +1,4 @@
 # 매일 새벽 5시(한국시간) OTT 크롤링 실행
-0 5 * * * cd /app && /usr/local/bin/python /app/src/main.py >> /var/log/crawler/cron.log 2>&1
+0 5 * * * cd /app && /usr/local/bin/python /app/src/main.py >> /var/log/cron.log 2>&1
 
 # 빈 줄 필수 (cron 요구사항)
