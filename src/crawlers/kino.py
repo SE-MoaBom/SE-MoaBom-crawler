@@ -151,9 +151,10 @@ class KinoCrawler(Crawler):
             ott_name = OTTPlatform.from_korean(await name_el.text_content())
 
             url_el = await item.query_selector("a")
+            href = await url_el.get_attribute("href") if url_el else None
             raw_url = (
-                await url_el.get_attribute("href")
-                if url_el
+                href
+                if href
                 else f"https://search.naver.com/search.naver?query={urllib.parse.quote(title)}"
             )
 
